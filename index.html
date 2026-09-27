@@ -80,7 +80,24 @@ dialog .in{padding:16px;display:flex;flex-direction:column;gap:12px}
 <dialog id="dlg"><div class="in" id="dlgBody"></div></dialog>
 
 <script>
-const sb = supabase.createClient(window.SB_URL, window.SB_KEY);
+// "Manter conectada": sessão guardada no aparelho (localStorage) ou só até fechar (sessionStorage)
+const lembrar = () => { try { return localStorage.getItem('fin_lembrar') !== '0'; } catch(e) { return true; } };
+const store = () => { try { return lembrar() ? localStorage : sessionStorage; } catch(e) { return null; } };
+const armazenamento = {
+  getItem: k => { try { return localStorage.getItem(k) ?? sessionStorage.getItem(k); } catch(e) { return null; } },
+  setItem: (k, v) => { try { store().setItem(k, v); } catch(e) {} },
+  removeItem: k => { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch(e) {} }
+};
+const sb = supabase.createClient(window.SB_URL, window.SB_KEY, { auth: { storage: armazenamento, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+function traduz(msg){
+  msg = String(msg || '');
+  if (/rate limit/i.test(msg)) return 'O Supabase só manda 2 emails por hora e esse limite foi atingido. Tente de novo daqui a ~1 hora (clique uma vez só).';
+  if (/not confirmed/i.test(msg)) return 'Falta confirmar o email: abra o link que o Supabase mandou (olhe no spam também).';
+  if (/already registered|already been registered/i.test(msg)) return 'Esse email já tem acesso. Use Entrar ou Esqueci a senha.';
+  if (/Invalid login/i.test(msg)) return 'Email ou senha incorretos.';
+  if (/at least 6/i.test(msg)) return 'A senha precisa ter pelo menos 6 caracteres.';
+  return msg;
+}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const brl = v => v == null ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -119,20 +136,23 @@ function telaLogin(msg=''){
     <form id="fLogin">
       <label>Email<input id="lEmail" type="email" autocomplete="email" required></label>
       <label>Senha<input id="lSenha" type="password" autocomplete="current-password" minlength="6" required></label>
+      <label class="chk"><input id="lLembrar" type="checkbox" ${lembrar()?'checked':''}> Manter conectada neste aparelho</label>
       <button class="primary" type="submit">Entrar</button>
       <div class="row between small"><button type="button" class="small" id="bPrimeiro">Primeiro acesso</button><button type="button" class="small" id="bEsqueci">Esqueci a senha</button></div>
     </form></div></div>`;
-  $('#fLogin').onsubmit = async e => { e.preventDefault();
+  const salvaLembrar = () => { try { localStorage.setItem('fin_lembrar', $('#lLembrar').checked ? '1' : '0'); } catch(e) {} };
+  $('#fLogin').onsubmit = async e => { e.preventDefault(); salvaLembrar();
     const {error} = await sb.auth.signInWithPassword({email:$('#lEmail').value.trim(), password:$('#lSenha').value});
-    if (error) telaLogin(error.message.includes('Invalid') ? 'Email ou senha incorretos.' : error.message); };
+    if (error) telaLogin(traduz(error.message)); };
   $('#bPrimeiro').onclick = async () => { const email=$('#lEmail').value.trim(), senha=$('#lSenha').value;
     if (!email || senha.length < 6) return toast('Preencha email e uma senha com 6+ caracteres');
     const {error} = await sb.auth.signUp({email, password:senha, options:{emailRedirectTo: location.href.split('#')[0]}});
-    if (error) return telaLogin(error.message);
-    toast('Acesso criado. Se pedir, confirme pelo link no seu email.'); };
+    salvaLembrar();
+    if (error) return telaLogin(traduz(error.message));
+    telaLogin('Acesso criado. Agora abra o email do Supabase (olhe no spam) e clique no link de confirmação. Depois é só Entrar.'); };
   $('#bEsqueci').onclick = async () => { const email=$('#lEmail').value.trim(); if(!email) return toast('Digite o email primeiro');
     const {error} = await sb.auth.resetPasswordForEmail(email, {redirectTo: location.href.split('#')[0]});
-    toast(error ? error.message : 'Enviamos um link pro seu email.'); };
+    telaLogin(error ? traduz(error.message) : 'Pronto: mandamos um link pro seu email (olhe no spam). Abra no mesmo aparelho e crie a senha nova.'); };
 }
 function telaSemAcesso(email){
   $('#tabs').hidden = true;
@@ -141,7 +161,7 @@ function telaSemAcesso(email){
 }
 // Link de recuperação de senha
 sb.auth.onAuthStateChange(async ev => { if (ev === 'PASSWORD_RECOVERY') abrir(`<h2>Nova senha</h2><form id="fNova"><label>Senha nova<input id="nSenha" type="password" minlength="6" required></label><button class="primary">Salvar</button></form>`, () => {
-  $('#fNova').onsubmit = async e => { e.preventDefault(); const {error} = await sb.auth.updateUser({password:$('#nSenha').value}); fechar(); toast(error ? error.message : 'Senha trocada'); }; }); });
+  $('#fNova').onsubmit = async e => { e.preventDefault(); const {error} = await sb.auth.updateUser({password:$('#nSenha').value}); fechar(); toast(error ? traduz(error.message) : 'Senha trocada. Você já está dentro.'); }; }); });
 
 /* ---------- Navegação ---------- */
 const ICON = {
