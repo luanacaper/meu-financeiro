@@ -360,14 +360,16 @@ function lancar(){
       <div class="grid2"><label>Valor<input id="cVal" type="number" step="0.01" inputmode="decimal" required></label><label id="lblData">Data<input id="cData" type="date" value="${hoje()}" required></label></div>
       <div class="grid2"><label>Categoria<input id="cCat" list="dlC" placeholder="mercado, casa…"><datalist id="dlC">${['mercado','casa','bebê','transporte','saúde','lazer','ferramentas','cliente','impostos','cartao','educacao'].map(c=>`<option value="${c}">`).join('')}</datalist></label>
       <label id="lblForma">Forma<select id="cForma">${FORMAS.map(([v,n])=>`<option value="${v}">${n}</option>`).join('')}</select></label></div>
-      <label id="lblQuem">Quem<select id="cQuem"><option>Lu</option><option>Heuller</option></select></label>
+      <div class="grid2" id="lblQuem"><label>Quem<select id="cQuem"><option>Lu</option><option>Heuller</option></select></label>
+      <label>Parcelas<input id="cParc" type="number" min="1" max="24" value="1"></label></div>
+      <p class="small muted" id="dicaCartao">No crédito Nubank ou Inter, o valor entra sozinho na fatura certa (dividido, se for parcelado).</p>
       <button class="primary">Salvar</button></form>`, () => {
     let k = 'gasto';
     document.querySelectorAll('#dlgBody .seg button').forEach(b => b.onclick = () => { k = b.dataset.k;
       document.querySelectorAll('#dlgBody .seg button').forEach(x => x.classList.toggle('on', x===b));
-      $('#lblData').firstChild.textContent = k==='gasto' ? 'Data' : 'Vencimento'; $('#lblQuem').hidden = k!=='gasto'; });
+      $('#lblData').firstChild.textContent = k==='gasto' ? 'Data' : 'Vencimento'; $('#lblQuem').hidden = k!=='gasto'; $('#dicaCartao').hidden = k!=='gasto'; });
     $('#fLanc').onsubmit = async e => { e.preventDefault(); try {
-      if (k === 'gasto') await q(sb.from('gastos').insert({data:$('#cData').value, descricao:$('#cDesc').value.trim(), valor:+$('#cVal').value, categoria:$('#cCat').value.trim()||null, forma:$('#cForma').value, quem:$('#cQuem').value, origem:'painel'}));
+      if (k === 'gasto') await q(sb.from('gastos').insert({data:$('#cData').value, descricao:$('#cDesc').value.trim(), valor:+$('#cVal').value, categoria:$('#cCat').value.trim()||null, forma:$('#cForma').value, quem:$('#cQuem').value, parcelas:Math.max(1, +$('#cParc').value||1), origem:'painel'}));
       else await q(sb.from('lancamentos').insert({descricao:$('#cDesc').value.trim(), tipo:k==='conta'?'saida':'entrada', valor_previsto:+$('#cVal').value, vencimento:$('#cData').value, categoria:$('#cCat').value.trim()||null, forma_pagamento:$('#cForma').value, origem:'painel'}));
       fechar(); toast('Lançado'); render(); } catch(err) { erro(err); } };
   });
