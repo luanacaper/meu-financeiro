@@ -230,16 +230,21 @@ async function semana(){
   const abertos = await q(sb.from('lancamentos').select('*').in('status',['previsto','adiado','negociando']).lte('vencimento', fim).order('vencimento'));
   const pagos = await q(sb.from('lancamentos').select('*').eq('status','pago').gte('pago_em', addDias(h,-7)).order('pago_em', {ascending:false}));
   const atras = abertos.filter(l => l.vencimento < h), sem = abertos.filter(l => l.vencimento >= h);
+  let pend = []; try { pend = await q(sb.from('mensagens_pendentes').select('*').eq('status','aberta').order('recebido_em')); } catch(e) {}
   const soma = (arr, t) => arr.filter(l => l.tipo===t).reduce((s,l) => s + Number(l.valor_previsto||0), 0);
   const sai = soma(abertos,'saida'), ent = soma(abertos,'entrada');
   $('#app').innerHTML = `<div class="row between"><div><h1>Esta semana</h1><p class="muted small">${ddmm(h)} a ${ddmm(fim)}</p></div><button class="small" id="bSair">Sair</button></div>
     <div class="grid2"><div class="card kpi"><span class="muted small">Pra pagar (com atrasados)</span><b>${brl(sai)}</b></div>
     <div class="card kpi"><span class="muted small">Pra receber</span><b style="color:var(--good)">${brl(ent)}</b></div></div>
+    ${pend.length ? `<div class="card"><h2 style="color:var(--warn)">Pra revisar (${pend.length})</h2><p class="small muted">Mensagens do grupo que o robô não entendeu sozinho. Toque pra marcar como resolvida.</p>${pend.map(p=>`<div class="item" data-pid="${p.id}" style="grid-template-columns:52px 1fr auto"><span class="d">${ddmm(p.recebido_em.slice(0,10))}</span><span class="t"><div>${esc(p.texto).replace(/
+/g,'<br>')}</div><small>${esc(p.quem||'')}</small></span><span class="pill warn">abrir</span></div>`).join('')}</div>` : ''}
     ${atras.length ? `<div class="card"><h2 style="color:var(--crit)">Atrasados</h2>${atras.map(linhaLanc).join('')}</div>` : ''}
     <div class="card"><h2>Próximos 7 dias</h2>${sem.map(linhaLanc).join('') || '<p class="empty">Nada vencendo.</p>'}</div>
     <div class="card"><h2>Pago nos últimos 7 dias</h2>${pagos.map(linhaLanc).join('') || '<p class="empty">Nada ainda.</p>'}</div>
     <p class="muted small">Toque numa conta pra marcar como paga, mudar data ou valor.</p>`;
   ligarItens($('#app'), semana);
+  document.querySelectorAll('[data-pid]').forEach(el => el.onclick = async () => { el.querySelector('.pill').textContent = 'toque de novo = resolvida';
+    el.onclick = async () => { try { await q(sb.from('mensagens_pendentes').update({status:'resolvida', resolucao:'marcada no painel'}).eq('id', +el.dataset.pid)); toast('Resolvida'); semana(); } catch(e) { erro(e); } }; });
   $('#bSair').onclick = () => sb.auth.signOut();
 }
 
@@ -266,10 +271,10 @@ async function mes(){
     <div class="card"><h2>Pra onde vai</h2><div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">${cats.map(([c,v])=>`<div><div class="row between small"><span>${esc(c)}</span><span class="num">${brl(v)}</span></div><div class="bar"><i style="width:${(v/maxC*100).toFixed(1)}%"></i></div></div>`).join('') || '<p class="empty">Sem dados.</p>'}</div></div>
     <div class="card"><h2>Contas e entradas</h2>${ls.map(linhaLanc).join('') || '<p class="empty">Nada neste mês.</p>'}</div>
     <div class="card"><h2>Gastos avulsos</h2>${gs.map(g=>`<div class="item"><span class="d">${ddmm(g.data)}</span><span class="t"><div>${esc(g.descricao)}</div><small>${esc(g.categoria||'')} · ${esc(g.forma||'')} · ${esc(g.quem||'')}</small></span><span class="num">${brl(g.valor)}</span></div>`).join('') || '<p class="empty">Nenhum.</p>'}</div>
-    <button id="bGerar" class="small">Gerar contas fixas deste mês</button>`;
+    ${ini >= hoje().slice(0,7)+'-01' ? '<button id="bGerar" class="small">Gerar contas fixas deste mês</button>' : ''}`;
   $('#mAnt').onclick = () => { mesAtual = nav(-1); mes(); };
   $('#mProx').onclick = () => { mesAtual = nav(1); mes(); };
-  $('#bGerar').onclick = async () => { try { const n = await q(sb.rpc('gerar_mes', {p_mes: ini})); toast(n ? `${n} contas criadas` : 'Este mês já estava gerado'); mes(); } catch(e) { erro(e); } };
+  if ($('#bGerar')) $('#bGerar').onclick = async () => { try { const n = await q(sb.rpc('gerar_mes', {p_mes: ini})); toast(n ? `${n} contas criadas` : 'Este mês já estava gerado'); mes(); } catch(e) { erro(e); } };
   ligarItens($('#app'), mes);
 }
 
