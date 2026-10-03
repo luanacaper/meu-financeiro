@@ -230,10 +230,16 @@ async function semana(){
   const abertos = await q(sb.from('lancamentos').select('*').in('status',['previsto','adiado','negociando']).lte('vencimento', fim).order('vencimento'));
   const pagos = await q(sb.from('lancamentos').select('*').eq('status','pago').gte('pago_em', addDias(h,-7)).order('pago_em', {ascending:false}));
   const atras = abertos.filter(l => l.vencimento < h), sem = abertos.filter(l => l.vencimento >= h);
+  let saldos = []; try { saldos = await q(sb.from('saldos').select('*').order('conta')); } catch(e) {}
+  const saldoTot = saldos.reduce((a,x)=>a+Number(x.valor||0),0);
   let pend = []; try { pend = await q(sb.from('mensagens_pendentes').select('*').eq('status','aberta').order('recebido_em')); } catch(e) {}
   const soma = (arr, t) => arr.filter(l => l.tipo===t).reduce((s,l) => s + Number(l.valor_previsto||0), 0);
-  const sai = soma(abertos,'saida'), ent = soma(abertos,'entrada');
+  const sai = soma(abertos.filter(l=>l.status!=='negociando'),'saida'), ent = soma(abertos,'entrada');
   $('#app').innerHTML = `<div class="row between"><div><h1>Esta semana</h1><p class="muted small">${ddmm(h)} a ${ddmm(fim)}</p></div><button class="small" id="bSair">Sair</button></div>
+    <div class="card" id="cSaldo"><div class="row between"><span class="muted small">🏦 Dinheiro em conta</span><button class="small" id="bSaldo">Atualizar</button></div>
+      <b class="num" style="font-size:26px">${brl(saldoTot)}</b>
+      <div class="small muted">${saldos.map(x=>`${esc(x.nome)}: ${brl(x.valor)} <span title="${esc(x.quem||'')}">(${ddmm(String(x.atualizado_em).slice(0,10))})</span>`).join(' · ')}</div>
+      <div class="small" style="margin-top:6px;color:${saldoTot+ent-sai>=0?'var(--good)':'var(--crit)'}">${saldoTot+ent-sai>=0?'Saldo + a receber cobre a semana: sobra '+brl(saldoTot+ent-sai):'Faltam '+brl(sai-saldoTot-ent)+' pra cobrir a semana'}</div></div>
     <div class="grid2"><div class="card kpi"><span class="muted small">Pra pagar (com atrasados)</span><b>${brl(sai)}</b></div>
     <div class="card kpi"><span class="muted small">Pra receber</span><b style="color:var(--good)">${brl(ent)}</b></div></div>
     ${pend.length ? `<div class="card"><h2 style="color:var(--warn)">Pra revisar (${pend.length})</h2><p class="small muted">Mensagens do grupo que o robô não entendeu sozinho. Toque pra marcar como resolvida.</p>${pend.map(p=>`<div class="item" data-pid="${p.id}" style="grid-template-columns:52px 1fr auto"><span class="d">${ddmm(p.recebido_em.slice(0,10))}</span><span class="t"><div>${esc(p.texto).replace(/
@@ -243,6 +249,11 @@ async function semana(){
     <div class="card"><h2>Pago nos últimos 7 dias</h2>${pagos.map(linhaLanc).join('') || '<p class="empty">Nada ainda.</p>'}</div>
     <p class="muted small">Toque numa conta pra marcar como paga, mudar data ou valor.</p>`;
   ligarItens($('#app'), semana);
+  $('#bSaldo').onclick = () => abrir(`<h2>Atualizar saldo</h2><form id="fSaldo">${saldos.map(x=>`<label>${esc(x.nome)}<input type="number" step="0.01" inputmode="decimal" data-conta="${x.conta}" value="${x.valor}"></label>`).join('')}<button class="primary">Salvar</button></form>`, () => {
+    $('#fSaldo').onsubmit = async e => { e.preventDefault(); try {
+      for (const inp of document.querySelectorAll('#fSaldo input[data-conta]')) { const ant = saldos.find(x=>x.conta===inp.dataset.conta);
+        if (+inp.value !== Number(ant.valor)) await q(sb.from('saldos').update({valor:+inp.value, atualizado_em:new Date().toISOString(), quem:'painel'}).eq('conta', inp.dataset.conta)); }
+      fechar(); toast('Saldo atualizado'); semana(); } catch(err) { erro(err); } }; });
   document.querySelectorAll('[data-pid]').forEach(el => el.onclick = async () => { el.querySelector('.pill').textContent = 'toque de novo = resolvida';
     el.onclick = async () => { try { await q(sb.from('mensagens_pendentes').update({status:'resolvida', resolucao:'marcada no painel'}).eq('id', +el.dataset.pid)); toast('Resolvida'); semana(); } catch(e) { erro(e); } }; });
   $('#bSair').onclick = () => sb.auth.signOut();
