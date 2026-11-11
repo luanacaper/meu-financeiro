@@ -323,14 +323,14 @@ async function cartoes(){
 
 /* ---------- Listas ---------- */
 async function listas(){
-  const itens = await q(sb.from('listas').select('*').eq('lista', listaAtual).order('status').order('prioridade').order('created_at'));
+  const itens = await q(sb.from('listas').select('*').eq('lista', listaAtual).order('status').order('prioridade').order('ordem',{nullsFirst:false}).order('created_at'));
   const pend = itens.filter(i=>i.status==='pendente'), feitos = itens.filter(i=>i.status!=='pendente');
   const total = pend.reduce((s,i)=>s+Number(i.preco_alvo||i.valor_estimado||0),0);
   const cats = [...new Set(itens.map(i=>i.categoria).filter(Boolean))];
   const li = i => `<div class="item" data-lid="${i.id}" style="grid-template-columns:44px 1fr auto">
     <span class="d pri${i.prioridade}">${PRI[i.prioridade]}</span>
     <span class="t"><div>${esc(i.item)} ${i.ugc_possivel?'<span class="pill info">UGC</span>':''} ${i.status!=='pendente'?`<span class="pill good">${i.status}</span>`:''}</div>
-      <small>${[i.categoria, i.prazo?'até '+ddmm(i.prazo):'', i.preco_alvo?'alvo '+brl(i.preco_alvo):'', i.obs].filter(Boolean).map(esc).join(' · ')}</small></span>
+      <small>${[i.quando?'🗓 '+i.quando:'', i.categoria, i.prazo?'até '+ddmm(i.prazo):'', i.preco_alvo?'alvo '+brl(i.preco_alvo):'', i.obs].filter(Boolean).map(esc).join(' · ')}</small></span>
     <span class="num">${i.valor_estimado?brl(i.valor_estimado):''}</span></div>`;
   $('#app').innerHTML = `<div class="row between"><h1>Listas</h1><button class="primary small" id="bNovo">+ Item</button></div>
     <div class="seg">${LISTAS.map(([k,n])=>`<button data-l="${k}" class="${k===listaAtual?'on':''}">${n}</button>`).join('')}</div>
