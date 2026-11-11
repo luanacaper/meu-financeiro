@@ -119,8 +119,14 @@ function erro(e){ console.error(e); toast('Erro: ' + (e.message || e.hint || e.c
 async function q(p){ const {data, error} = await p; if (error) throw error; return data; }
 
 /* ---------- Auth ---------- */
+// Link de email vencido/inválido chega como #error=...: limpa a URL e mostra o motivo em vez de travar em "Carregando…"
+const erroLink = (() => { const h = new URLSearchParams(location.hash.slice(1)); return h.get('error') ? (h.get('error_code') || h.get('error')) : null; })();
+if (erroLink) history.replaceState(null, '', location.pathname);
 async function iniciar(){
-  const {data:{session}} = await sb.auth.getSession();
+  if (erroLink && !iniciar.mostrouErro) { iniciar.mostrouErro = true;
+    return telaLogin(/expired/.test(erroLink) ? 'Esse link do email já venceu (eles valem pouco tempo). Digite email e senha e clique em Entrar. Se pedir confirmação, use "Reenviar confirmação".' : 'Não deu pra entrar pelo link do email. Entre com email e senha.'); }
+  let session = null;
+  try { ({data:{session}} = await sb.auth.getSession()); } catch(e) { return telaLogin('Não consegui verificar o login. Entre de novo.'); }
   if (!session) return telaLogin();
   const ok = await sb.rpc('eh_permitido');
   if (!ok.data) return telaSemAcesso(session.user.email);
@@ -139,6 +145,7 @@ function telaLogin(msg=''){
       <label class="chk"><input id="lLembrar" type="checkbox" ${lembrar()?'checked':''}> Manter conectada neste aparelho</label>
       <button class="primary" type="submit">Entrar</button>
       <div class="row between small"><button type="button" class="small" id="bPrimeiro">Primeiro acesso</button><button type="button" class="small" id="bEsqueci">Esqueci a senha</button></div>
+      <button type="button" class="small" id="bReenviar">Reenviar confirmação de email</button>
     </form></div></div>`;
   const salvaLembrar = () => { try { localStorage.setItem('fin_lembrar', $('#lLembrar').checked ? '1' : '0'); } catch(e) {} };
   $('#fLogin').onsubmit = async e => { e.preventDefault(); salvaLembrar();
@@ -150,6 +157,9 @@ function telaLogin(msg=''){
     salvaLembrar();
     if (error) return telaLogin(traduz(error.message));
     telaLogin('Acesso criado. Agora abra o email do Supabase (olhe no spam) e clique no link de confirmação. Depois é só Entrar.'); };
+  $('#bReenviar').onclick = async () => { const email=$('#lEmail').value.trim(); if(!email) return toast('Digite o email primeiro');
+    const {error} = await sb.auth.resend({type:'signup', email, options:{emailRedirectTo: location.href.split('#')[0]}});
+    telaLogin(error ? traduz(error.message) : 'Mandei um link novo (olhe no spam). Abra ele em até 1 hora, neste mesmo navegador.'); };
   $('#bEsqueci').onclick = async () => { const email=$('#lEmail').value.trim(); if(!email) return toast('Digite o email primeiro');
     const {error} = await sb.auth.resetPasswordForEmail(email, {redirectTo: location.href.split('#')[0]});
     telaLogin(error ? traduz(error.message) : 'Pronto: mandamos um link pro seu email (olhe no spam). Abra no mesmo aparelho e crie a senha nova.'); };
