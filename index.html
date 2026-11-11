@@ -57,7 +57,7 @@ form{display:flex;flex-direction:column;gap:10px}
 .seg button{flex:1;border:0;border-radius:8px;padding:7px 4px;background:transparent;color:var(--muted)}
 .seg button.on{background:var(--accent-soft);color:var(--accent)}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:6px 6px calc(6px + env(safe-area-inset-bottom));z-index:5}
-nav.tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:1px;font-size:11.5px;color:var(--muted);padding:4px 8px;min-width:58px}
+nav.tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:1px;font-size:11px;color:var(--muted);padding:4px 4px;min-width:48px}
 nav.tabs button svg{width:22px;height:22px}
 nav.tabs button.on{color:var(--accent)}
 nav.tabs button.add{background:var(--accent);color:var(--accent-ink);border-radius:14px}
@@ -179,18 +179,19 @@ const ICON = {
   mes:'<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2"/>',
   add:'<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
   cartoes:'<rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M2 10h20" stroke="currentColor" stroke-width="2"/>',
-  listas:'<path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4.5" cy="6" r="1.5" fill="currentColor"/><circle cx="4.5" cy="12" r="1.5" fill="currentColor"/><circle cx="4.5" cy="18" r="1.5" fill="currentColor"/>'
+  listas:'<path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4.5" cy="6" r="1.5" fill="currentColor"/><circle cx="4.5" cy="12" r="1.5" fill="currentColor"/><circle cx="4.5" cy="18" r="1.5" fill="currentColor"/>',
+  plano:'<circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>'
 };
 function montarTabs(){
   const t = $('#tabs'); t.hidden = false;
-  t.innerHTML = [['semana','Semana'],['mes','Mês'],['add','Lançar'],['cartoes','Cartões'],['listas','Listas']].map(([k,n]) =>
+  t.innerHTML = [['semana','Semana'],['plano','Plano'],['mes','Mês'],['add','Lançar'],['cartoes','Cartões'],['listas','Listas']].map(([k,n]) =>
     `<button data-t="${k}" class="${k==='add'?'add':''} ${tab===k?'on':''}" aria-label="${n}"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${n}</button>`).join('');
   t.querySelectorAll('button').forEach(b => b.onclick = () => {
     if (b.dataset.t === 'add') return lancar();
     tab = b.dataset.t; try { localStorage.setItem('fin_tab', tab); } catch(e) {}
     t.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); render(); });
 }
-async function render(){ try { await ({semana, mes, cartoes, listas})[tab](); } catch(e) { erro(e); } }
+async function render(){ try { await ({semana, plano, mes, cartoes, listas}[tab] || semana)(); } catch(e) { erro(e); } }
 
 /* ---------- Diálogo ---------- */
 function abrir(html, depois){ $('#dlgBody').innerHTML = html + '<button type="button" id="dlgFechar">Cancelar</button>'; $('#dlgFechar').onclick = fechar; $('#dlg').showModal(); depois && depois(); }
@@ -377,13 +378,108 @@ function editarItem(i, cats){
   });
 }
 
+/* ---------- Plano ---------- */
+// Regras e combinados do plano de novembro/2026 (texto fixo). Os números vêm todos do banco.
+const PLANO = {
+  ciclos: [
+    ['dia 10', 'HF', 'Amil (pedir pra mudar do dia 1 pro 10), cartão do Heuller (10), Nio (11), Claro (15)'],
+    ['dia 18', 'S&P', 'Fatura do Inter (20) e água (21)'],
+    ['dia 23–24', 'Aimê + Fast', 'Chely R$ 1.500, IPVA (25), energia (27), Nubank (28), Shopee (06), caixinha do aluguel do dia 05 (R$ 1.200) e 10% pra reserva']
+  ],
+  regras: [
+    ['🛟', 'Em cada entrada, separar 10% pra reserva e mandar <b>reserva 200</b> no grupo (ou usar o botão aqui).'],
+    ['🛒', 'Ordem de compra: saúde e segurança › o que economiza dinheiro › ferramenta de trabalho › roupa e casa › festa e desejo.'],
+    ['🎁', 'Compra acima de R$ 100: antes, 10 dias tentando conseguir via UGC/permuta.'],
+    ['📚', 'Nenhum curso novo até quitar a TMB e o licenciamento.'],
+    ['🚗', 'O carro tem reserva própria de R$ 300/mês: conserto não sai do dinheiro do mercado.'],
+    ['🏠', 'Clientes pagam direto na chave Pix do C6 e as contas saem de lá: assim o C6 passa dos R$ 6.000/mês do financiamento.'],
+    ['💳', 'Cartão: descer o teto aos poucos (~R$ 150/mês), parcelar só sem juros e antecipar parcela quando sobrar.'],
+    ['🧪', 'Tetos da semana (mercado, gasolina, delivery, leite/farmácia) em teste por um mês, até 11/12.']
+  ],
+  combinados: [
+    'Cancelados em 11/11: Canva, Globoplay, Meli+, CapCut e iCloud (R$ 137,50/mês a menos). Os dois Google One ficam (trabalho e celular do Heuller).',
+    'Claude Max fica: é ferramenta da agência. A meta é ele se pagar com cliente novo antes de março.',
+    'Março: a Aimê termina e a renda cai R$ 3.000. Até lá, entrar cliente novo (ou UGC em dólar) ou baixar o custo fixo.',
+    'Pendente: pedir pra Amil mudar o vencimento pro dia 10.',
+    'Pendente: criar a chave Pix do C6 e avisar os 4 clientes.'
+  ]
+};
+async function plano(){
+  const h = hoje(), mesIni = h.slice(0,7)+'-01';
+  const seg = addDias(h, -((new Date(h+'T12:00').getDay()+6)%7));
+  const [rec, orc, gs, metas, c6, compras] = await Promise.all([
+    q(sb.from('recorrentes').select('*').eq('ativo', true)),
+    q(sb.from('orcamento').select('*')),
+    q(sb.from('gastos').select('data,valor,categoria').gte('data', mesIni < seg ? mesIni : seg)),
+    q(sb.from('metas').select('*')),
+    q(sb.from('lancamentos').select('valor_pago,valor_previsto').eq('conta','c6').eq('status','pago').gte('pago_em', mesIni)),
+    q(sb.from('listas').select('*').eq('status','pendente').order('prioridade').order('ordem',{nullsFirst:false}).limit(5))
+  ]);
+  const vale = (r, d) => !r.fim || r.fim >= d;
+  const ent = rec.filter(r => r.tipo==='entrada' && vale(r, mesIni));
+  const repasse = rec.filter(r => r.tipo==='saida' && /chely/i.test(r.nome) && vale(r, mesIni)).reduce((s,r)=>s+Number(r.valor||0),0);
+  const somaE = d => rec.filter(r => r.tipo==='entrada' && vale(r, d)).reduce((s,r)=>s+Number(r.valor||0),0);
+  const marco = (h >= h.slice(0,4)+'-03-01' ? (+h.slice(0,4)+1) : +h.slice(0,4)) + '-03-01';
+  const eHoje = somaE(mesIni) - repasse, eMarco = somaE(marco) - repasse;
+  const fixos = rec.filter(r => r.tipo==='saida' && vale(r, mesIni) && !/chely/i.test(r.nome));
+  const fixoTot = fixos.reduce((s,r)=>s+Number(r.valor||0),0);
+  const porCat = {}; fixos.forEach(r => (porCat[r.categoria||'outros'] ||= []).push(r));
+  const catsFixo = Object.entries(porCat).map(([c, rs]) => [c, rs, rs.reduce((s,r)=>s+Number(r.valor||0),0)]).sort((a,b)=>b[2]-a[2]);
+  const gastoCat = (cat, desde) => gs.filter(g => g.categoria===cat && g.data >= desde).reduce((s,g)=>s+Number(g.valor),0);
+  const barra = (usado, teto) => { const pct = teto>0 ? Math.min(100, usado/teto*100) : (usado>0?100:0);
+    return `<div class="bar"><i class="${usado>teto?'over':''}" style="width:${pct.toFixed(1)}%"></i></div>`; };
+  const semanais = orc.filter(o => o.teto_semana != null).sort((a,b)=>b.teto_semana-a.teto_semana);
+  const mensais = orc.filter(o => o.teto_semana == null && o.teto_mes != null).sort((a,b)=>b.teto_mes-a.teto_mes);
+  const livre = semanais.reduce((s,o)=>s+Math.max(0, Number(o.teto_semana)-gastoCat(o.categoria, seg)),0);
+  const res = metas.find(m=>m.chave==='reserva'), mc6 = metas.find(m=>m.chave==='c6');
+  const c6Mes = c6.reduce((s,l)=>s+Number(l.valor_pago??l.valor_previsto??0),0);
+  const meta = (titulo, atual, alvo, sub) => `<div style="display:flex;flex-direction:column;gap:4px">
+      <div class="row between"><b>${titulo}</b><span class="num">${brl(atual)} <span class="muted small">/ ${brl(alvo)}</span></span></div>
+      ${barra(atual, alvo).replace('over','')}<span class="small muted">${sub}</span></div>`;
+  $('#app').innerHTML = `<div><h1>Plano</h1><p class="muted small">Reserva até fevereiro, compras na ordem certa e torneiras fechadas. Os números se atualizam sozinhos.</p></div>
+    <div class="grid2">
+      <div class="card kpi"><span class="muted small">Entra por mês (já sem a Chely)</span><b style="color:var(--good)">${brl(eHoje)}</b><span class="small muted">${ent.map(r=>esc(r.nome.split(' — ')[0])).join(' · ')}</span></div>
+      <div class="card kpi"><span class="muted small">A partir de março</span><b style="color:${eMarco<eHoje?'var(--warn)':'var(--good)'}">${brl(eMarco)}</b><span class="small muted">${eMarco<eHoje?'contrato que termina antes: '+ent.filter(r=>r.fim && r.fim<marco).map(r=>esc(r.nome.split(' — ')[0])).join(', '):'sem mudança prevista'}</span></div>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;gap:14px"><h2>Metas</h2>
+      ${res ? meta('🛟 Reserva de emergência', Number(res.atual), Number(res.alvo), `até ${res.prazo?ddmm(res.prazo)+'/'+res.prazo.slice(0,4):'—'} · 10% de cada entrada`) : ''}
+      ${mc6 ? meta('🏠 C6 movimentado este mês', c6Mes, Number(mc6.alvo), 'pro financiamento da casa (conta só o que foi pago/recebido no C6)') : ''}
+      ${res ? '<button class="primary small" id="bReserva" style="align-self:flex-start">+ Guardei na reserva</button>' : ''}</div>
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+      <div class="row between"><h2>💸 Esta semana</h2><span class="small muted">desde ${diaSem(seg)} ${ddmm(seg)}</span></div>
+      <div class="kpi"><span class="muted small">Ainda dá pra gastar até domingo</span><b style="color:var(--good)">${brl(livre)}</b></div>
+      ${semanais.map(o => { const g = gastoCat(o.categoria, seg), t = Number(o.teto_semana);
+        return `<div><div class="row between small"><span>${esc(o.categoria)}</span><span class="num">${brl(g)} <span class="muted">/ ${brl(t)}</span></span></div>${barra(g,t)}
+          <span class="small" style="color:${g>t?'var(--crit)':'var(--muted)'}">${g>t?'passou '+brl(g-t):'sobra '+brl(t-g)}${o.obs?' · '+esc(o.obs):''}</span></div>`; }).join('') || '<p class="empty">Sem tetos cadastrados.</p>'}
+      <p class="small muted">Conta só o que é lançado: aqui em Lançar ou no grupo (<b>gastei 80 mercado pix</b>).</p></div>
+    ${mensais.length ? `<div class="card" style="display:flex;flex-direction:column;gap:10px"><h2>Tetos do mês</h2>
+      ${mensais.map(o => { const g = gastoCat(o.categoria, mesIni), t = Number(o.teto_mes);
+        return `<div><div class="row between small"><span>${esc(o.categoria)}</span><span class="num">${brl(g)} <span class="muted">/ ${t?brl(t):'R$ 0 (pausa)'}</span></span></div>${barra(g,t)}${o.obs?`<span class="small muted">${esc(o.obs)}</span>`:''}</div>`; }).join('')}</div>` : ''}
+    <div class="card"><h2>Quando entra × o que paga</h2>
+      ${PLANO.ciclos.map(([d, quem, paga]) => { const dias = (d.match(/\d+/g)||[]).map(Number), lo = Math.min(...dias), hi = Math.max(...dias);
+        const v = ent.filter(r => r.dia >= lo && r.dia <= hi).reduce((s,r)=>s+Number(r.valor||0),0);
+        return `<div class="item" style="grid-template-columns:64px 1fr"><span class="d">${d}</span><span class="t"><div><b>${quem}</b> <span class="num" style="color:var(--good)">${v?'+'+brl(v):''}</span></div><small>${paga}</small></span></div>`; }).join('')}</div>
+    <div class="card"><h2>Contas fixas por mês</h2><p class="small muted">${brl(fixoTot)} em ${fixos.length} contas (sem o repasse da Chely). Toque numa categoria pra ver.</p>
+      ${catsFixo.map(([c, rs, v]) => `<details style="border-bottom:1px solid var(--line);padding:8px 0"><summary class="row between" style="cursor:pointer"><span>${esc(c)} <span class="muted small">(${rs.length})</span></span><span class="num">${brl(v)}</span></summary>
+        ${rs.sort((a,b)=>(b.valor||0)-(a.valor||0)).map(r=>`<div class="row between small" style="padding:3px 0 3px 10px"><span>${esc(r.nome)}${r.dia?` <span class="muted">· dia ${r.dia}</span>`:''}${r.fim?` <span class="muted">· até ${ddmm(r.fim)}/${r.fim.slice(2,4)}</span>`:''}</span><span class="num">${r.valor!=null?brl(r.valor):'variável'}</span></div>`).join('')}</details>`).join('')}</div>
+    <div class="card"><div class="row between"><h2>🛒 Próximas compras</h2><button class="small" id="bVerListas">Ver lista</button></div>
+      ${compras.map((i,n)=>`<div class="item" style="grid-template-columns:28px 1fr auto"><span class="d">${n+1}º</span><span class="t"><div>${esc(i.item)} ${i.ugc_possivel?'<span class="pill info">UGC</span>':''}</div><small>${esc(i.quando||'')}</small></span><span class="num">${i.valor_estimado?brl(i.valor_estimado):'a cotar'}</span></div>`).join('') || '<p class="empty">Nada pendente.</p>'}</div>
+    <div class="card"><h2>Regras do plano</h2>${PLANO.regras.map(([e,t])=>`<div class="row" style="align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)"><span>${e}</span><span class="small">${t}</span></div>`).join('')}</div>
+    <div class="card"><h2>Combinados</h2>${PLANO.combinados.map(t=>`<p class="small" style="margin:6px 0">• ${esc(t)}</p>`).join('')}</div>`;
+  $('#bVerListas').onclick = () => { tab = 'listas'; listaAtual = 'compras'; try { localStorage.setItem('fin_tab', tab); } catch(e) {} montarTabs(); render(); };
+  const br = $('#bReserva'); if (br) br.onclick = () => abrir(`<h2>Guardei na reserva</h2><p class="muted small">Hoje: ${brl(res.atual)} de ${brl(res.alvo)}</p><form id="fRes"><label>Quanto guardou<input id="rVal" type="number" step="0.01" inputmode="decimal" required></label><button class="primary">Somar</button></form>`, () => {
+    $('#fRes').onsubmit = async e => { e.preventDefault(); try {
+      await q(sb.from('metas').update({atual: Number(res.atual) + +$('#rVal').value, atualizado_em: new Date().toISOString()}).eq('chave','reserva'));
+      fechar(); toast('Reserva atualizada'); plano(); } catch(err) { erro(err); } }; });
+}
+
 /* ---------- Lançar ---------- */
 function lancar(){
   abrir(`<h2>Lançar</h2><div class="seg"><button class="on" data-k="gasto">Gasto avulso</button><button data-k="conta">Conta a pagar</button><button data-k="entrada">Entrada</button></div>
     <form id="fLanc">
       <label>Descrição<input id="cDesc" required placeholder="ex.: carne, farmácia, freela"></label>
       <div class="grid2"><label>Valor<input id="cVal" type="number" step="0.01" inputmode="decimal" required></label><label id="lblData">Data<input id="cData" type="date" value="${hoje()}" required></label></div>
-      <div class="grid2"><label>Categoria<input id="cCat" list="dlC" placeholder="mercado, casa…"><datalist id="dlC">${['mercado','casa','bebê','transporte','saúde','lazer','ferramentas','cliente','impostos','cartao','educacao'].map(c=>`<option value="${c}">`).join('')}</datalist></label>
+      <div class="grid2"><label>Categoria<input id="cCat" list="dlC" placeholder="mercado, casa…"><datalist id="dlC">${['mercado','combustível','comer fora/delivery','leite/farmácia','carro (manutenção)','compras online/roupa','casa','bebê','saúde','lazer','ferramentas','cliente','impostos','educacao'].map(c=>`<option value="${c}">`).join('')}</datalist></label>
       <label id="lblForma">Forma<select id="cForma">${FORMAS.map(([v,n])=>`<option value="${v}">${n}</option>`).join('')}</select></label></div>
       <div class="grid2" id="lblQuem"><label>Quem<select id="cQuem"><option>Lu</option><option>Heuller</option></select></label>
       <label>Parcelas<input id="cParc" type="number" min="1" max="24" value="1"></label></div>
