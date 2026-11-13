@@ -62,7 +62,7 @@ nav.tabs button svg{width:22px;height:22px}
 nav.tabs button.on{color:var(--accent)}
 nav.tabs button.add{background:var(--accent);color:var(--accent-ink);border-radius:14px}
 .bar{height:10px;background:var(--bg);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}.bar i.over{background:var(--crit)}
-dialog{border:0;border-radius:14px;padding:0;width:min(440px,calc(100% - 32px));background:var(--surface);color:var(--ink)}
+dialog{border:0;border-radius:14px;padding:0;width:min(440px,calc(100% - 32px));max-height:90dvh;overflow-y:auto;background:var(--surface);color:var(--ink)}
 dialog::backdrop{background:rgba(0,0,0,.4)}
 dialog .in{padding:16px;display:flex;flex-direction:column;gap:12px}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:9px;font-size:14px;z-index:20}
@@ -80,6 +80,10 @@ dialog .in{padding:16px;display:flex;flex-direction:column;gap:12px}
 <dialog id="dlg"><div class="in" id="dlgBody"></div></dialog>
 
 <script>
+const VERSAO = '2026-11-13a';
+(async () => { try { const t = await (await fetch(location.pathname + '?nocache=' + Date.now(), {cache:'no-store'})).text();
+  const v = (t.match(/const VERSAO = '([^']+)'/) || [])[1];
+  if (v && v !== VERSAO && sessionStorage.getItem('fin_reload') !== v) { sessionStorage.setItem('fin_reload', v); location.reload(); } } catch(e) {} })();
 // "Manter conectada": sessão guardada no aparelho (localStorage) ou só até fechar (sessionStorage)
 const lembrar = () => { try { return localStorage.getItem('fin_lembrar') !== '0'; } catch(e) { return true; } };
 const store = () => { try { return lembrar() ? localStorage : sessionStorage; } catch(e) { return null; } };
@@ -352,7 +356,7 @@ async function listas(){
   $('#bNovo').onclick = () => editarItem(null, cats);
   document.querySelectorAll('[data-lid]').forEach(el => el.onclick = () => editarItem(itens.find(i=>i.id==el.dataset.lid), cats));
 }
-function editarItem(i, cats){
+function editarItem(i, cats, depois = listas){
   const v = i || {lista:listaAtual, prioridade:2};
   abrir(`<h2>${i?'Editar item':'Novo item'}</h2><form id="fItem">
     <label>Item<input id="iItem" value="${esc(v.item||'')}" required></label>
@@ -373,8 +377,8 @@ function editarItem(i, cats){
       const row = {item:$('#iItem').value.trim(), lista:$('#iLista').value, categoria:$('#iCat').value.trim()||null, prioridade:+$('#iPri').value, prazo:$('#iPrazo').value||null,
         valor_estimado:n($('#iVal')), preco_alvo:n($('#iAlvo')), link:$('#iLink').value.trim()||null, ugc_possivel:$('#iUgc').checked, obs:$('#iObs').value.trim()||null, updated_at:new Date().toISOString()};
       if (i) row.status = $('#iStatus').value;
-      try { await q(i ? sb.from('listas').update(row).eq('id', i.id) : sb.from('listas').insert(row)); fechar(); toast('Salvo'); listas(); } catch(err) { erro(err); } };
-    const d = $('#bDel'); if (d) d.onclick = async () => { d.textContent = 'Toque de novo pra apagar'; d.onclick = async () => { await q(sb.from('listas').delete().eq('id', i.id)); fechar(); toast('Apagado'); listas(); }; };
+      try { await q(i ? sb.from('listas').update(row).eq('id', i.id) : sb.from('listas').insert(row)); fechar(); toast('Salvo'); depois(); } catch(err) { erro(err); } };
+    const d = $('#bDel'); if (d) d.onclick = async () => { d.textContent = 'Toque de novo pra apagar'; d.onclick = async () => { await q(sb.from('listas').delete().eq('id', i.id)); fechar(); toast('Apagado'); depois(); }; };
   });
 }
 
@@ -462,10 +466,12 @@ async function plano(){
     <div class="card"><h2>Contas fixas por mês</h2><p class="small muted">${brl(fixoTot)} em ${fixos.length} contas (sem o repasse da Chely). Toque numa categoria pra ver.</p>
       ${catsFixo.map(([c, rs, v]) => `<details style="border-bottom:1px solid var(--line);padding:8px 0"><summary class="row between" style="cursor:pointer"><span>${esc(c)} <span class="muted small">(${rs.length})</span></span><span class="num">${brl(v)}</span></summary>
         ${rs.sort((a,b)=>(b.valor||0)-(a.valor||0)).map(r=>`<div class="row between small" style="padding:3px 0 3px 10px"><span>${esc(r.nome)}${r.dia?` <span class="muted">· dia ${r.dia}</span>`:''}${r.fim?` <span class="muted">· até ${ddmm(r.fim)}/${r.fim.slice(2,4)}</span>`:''}</span><span class="num">${r.valor!=null?brl(r.valor):'variável'}</span></div>`).join('')}</details>`).join('')}</div>
-    <div class="card"><div class="row between"><h2>🛒 Próximas compras</h2><button class="small" id="bVerListas">Ver lista</button></div>
-      ${compras.map((i,n)=>`<div class="item" style="grid-template-columns:28px 1fr auto"><span class="d">${n+1}º</span><span class="t"><div>${esc(i.item)} ${i.ugc_possivel?'<span class="pill info">UGC</span>':''}</div><small>${esc(i.quando||'')}</small></span><span class="num">${i.valor_estimado?brl(i.valor_estimado):'a cotar'}</span></div>`).join('') || '<p class="empty">Nada pendente.</p>'}</div>
+    <div class="card"><div class="row between"><h2>🛒 Próximas compras</h2><div class="row"><button class="small" id="bNovoP">+ Item</button><button class="small" id="bVerListas">Ver lista</button></div></div><p class="small muted">Toque num item pra editar, riscar ou apagar.</p>
+      ${compras.map((i,n)=>`<div class="item" data-cid="${i.id}" style="grid-template-columns:28px 1fr auto"><span class="d">${n+1}º</span><span class="t"><div>${esc(i.item)} ${i.ugc_possivel?'<span class="pill info">UGC</span>':''}</div><small>${esc(i.quando||'')}</small></span><span class="num">${i.valor_estimado?brl(i.valor_estimado):'a cotar'}</span></div>`).join('') || '<p class="empty">Nada pendente.</p>'}</div>
     <div class="card"><h2>Regras do plano</h2>${PLANO.regras.map(([e,t])=>`<div class="row" style="align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)"><span>${e}</span><span class="small">${t}</span></div>`).join('')}</div>
     <div class="card"><h2>Combinados</h2>${PLANO.combinados.map(t=>`<p class="small" style="margin:6px 0">• ${esc(t)}</p>`).join('')}</div>`;
+  $('#bNovoP').onclick = () => editarItem(null, [], plano);
+  document.querySelectorAll('[data-cid]').forEach(el => el.onclick = () => editarItem(compras.find(i=>i.id==el.dataset.cid), [], plano));
   $('#bVerListas').onclick = () => { tab = 'listas'; listaAtual = 'compras'; try { localStorage.setItem('fin_tab', tab); } catch(e) {} montarTabs(); render(); };
   const br = $('#bReserva'); if (br) br.onclick = () => abrir(`<h2>Guardei na reserva</h2><p class="muted small">Hoje: ${brl(res.atual)} de ${brl(res.alvo)}</p><form id="fRes"><label>Quanto guardou<input id="rVal" type="number" step="0.01" inputmode="decimal" required></label><button class="primary">Somar</button></form>`, () => {
     $('#fRes').onsubmit = async e => { e.preventDefault(); try {
